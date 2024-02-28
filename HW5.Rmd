@@ -1,0 +1,170 @@
+---
+title: "HW5"
+author: "Nihar Harkare"
+date: "2024-02-26"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(mosaic)
+library(tidyverse)
+```
+
+# Problem 1
+
+## Null Hypothesis:
+
+The baseline probability that any trade will be flagged by the SEC's algorithm is 2.4%
+
+## Test Statistic:
+
+70/2021 trades being flagged by the SEC's algorithm, or `r round((70/2021), 4)`.
+
+## Plot of the probability distribution:
+
+```{r echo=FALSE}
+sim_suspicious_trades = do(100000)*nflip(n=2021, prob=0.024)
+
+ggplot(sim_suspicious_trades) + 
+  geom_histogram(aes(x=nflip), binwidth=0.5, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Suspicious Trades", x = "Number of Suspicious Trades", y = "Frequency")
+
+p_suspicious_trades = sum(sim_suspicious_trades >= 70)/100000
+```
+
+## P-Value:
+
+`r p_suspicious_trades`
+
+## Conclusion:
+
+Assuming the null hypothesis is true, there is a `r (p_suspicious_trades * 100)` percent chance that we would get a test statistic of `r (70/2021)` or higher. Since p (`r p_suspicious_trades`) \< 0.05, there is a statistically significant chance that SEC's algorithm is also flagging illegal market activity.
+
+# Problem 2
+
+## Null Hypothesis:
+
+The baseline probability that any restaurant inspection will result in a health code violation by the Health Department is 3%
+
+## Test Statistic:
+
+8/50 inspections resulting in a health code violation by the Health Department, or `r (8/50)`.
+
+## Plot of the probability distribution:
+
+```{r echo=FALSE}
+sim_healthcode_violations = do(100000)*nflip(n=50, prob=0.03)
+
+ggplot(sim_healthcode_violations) + 
+  geom_histogram(aes(x=nflip), binwidth=0.5, fill = "orange", color = "black") +
+  labs(title = "Distribution of Health Code Violations", x = "Number of Violations", y = "Frequency")
+
+p_healthcode_violations = sum(sim_healthcode_violations >= 8)/100000
+```
+
+## P-Value:
+
+`r p_healthcode_violations`
+
+## Conclusion:
+
+Assuming the null hypothesis is true, there is a `r (p_healthcode_violations * 100)` percent chance that we would get a test statistic of `r (8/50)` or higher. Since p (`r p_healthcode_violations`) \< 0.05, there is a statistically significant chance that Gourmet Bites' rate of health code violations is significantly higher than the citywide average of 3%.
+
+# Problem 3
+
+## Part A
+
+```{r echo=FALSE}
+letter_frequencies = read_csv("letter_frequencies.csv", show_col_types = FALSE)
+brown_sentences = readLines("brown_sentences.txt")
+
+brown_sentences = paste(brown_sentences, collapse = " ")
+clean_sentences = gsub("[^A-Za-z.]", "", brown_sentences)
+clean_sentences = toupper(clean_sentences)
+
+letter_counts = table(strsplit(clean_sentences, NULL))
+letter_counts_df = as.data.frame(table(strsplit(clean_sentences, NULL)))
+colnames(letter_counts_df) = c("Letter", "Count")
+
+letter_counts_no_per = subset(letter_counts_df, Letter != ".")
+
+letter_counts_sentences = subset(letter_counts_df, Letter != ".")
+letter_counts_sentences$Count = letter_counts_sentences$Count / letter_counts_df$Count[1]
+letter_counts_sentences$FrequencyPerSentence = letter_counts_sentences$Count / sum(letter_counts_sentences$Count)
+
+total_letters = sum(letter_counts_no_per$Count)
+expected_letter_counts = merge(letter_frequencies, letter_counts_no_per, by = "Letter")
+expected_letter_counts$Expected_Count = expected_letter_counts$Probability * total_letters
+expected_letter_counts$Expected_Count_Sentence = expected_letter_counts$Expected_Count / letter_counts_df$Count[1]
+
+observed_counts = letter_counts_sentences$Count
+expected_counts = expected_letter_counts$Expected_Count_Sentence
+chi_square_stat = sum((observed_counts - expected_counts)^2 / expected_counts)
+
+boot_actual_counts <- replicate(10000, letter_counts_no_per$Count[sample(seq_along(letter_counts_no_per$Count), replace = TRUE)])
+
+chi_square_stats <- numeric(10000)
+
+for (i in seq_along(chi_square_stats)) {
+  boot_actual_counts_i <- boot_actual_counts[, i]
+  chi_square_stats[i] <- sum((letter_counts_no_per$Count - boot_actual_counts_i)^2 / letter_counts_no_per$Count)
+}
+```
+
+`r chi_square_stat`
+
+## Part B
+
+```{r echo=FALSE}
+sentences <- c(
+  "She opened the book and started to read the first chapter, eagerly anticipating what might come next.",
+  "Despite the heavy rain, they decided to go for a long walk in the park, crossing the main avenue by the fountain in the center.",
+  "The museum’s new exhibit features ancient artifacts from various civilizations around the world.",
+  "He carefully examined the document, looking for any clues that might help solve the mystery.",
+  "The students gathered in the auditorium to listen to the guest speaker’s inspiring lecture.",
+  "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.",
+  "The chef demonstrated how to prepare a delicious meal using only locally sourced ingredients, focusing mainly on some excellent dinner recipes from Spain.",
+  "They watched the sunset from the hilltop, marveling at the beautiful array of colors in the sky.",
+  "The committee reviewed the proposal and provided many points of useful feedback to improve the project’s effectiveness.",
+  "Despite the challenges faced during the project, the team worked tirelessly to ensure its successful completion, resulting in a product that exceeded everyone’s expectations."
+)
+
+calculate_chi_squared = function(sentence, freq_table) {
+  freq_table$Probability = freq_table$Probability / sum(freq_table$Probability)
+  
+  clean_sentence = gsub("[^A-Za-z]", "", sentence)
+  clean_sentence = toupper(clean_sentence)
+  
+  observed_counts = table(factor(strsplit(clean_sentence, "")[[1]], levels = freq_table$Letter))
+  
+  total_letters = sum(observed_counts)
+  expected_counts = total_letters * freq_table$Probability
+  
+  chi_squared_stat = sum((observed_counts - expected_counts)^2 / expected_counts)
+  
+  return(chi_squared_stat)
+}
+
+p_sentence = numeric(10)
+
+for (i in seq_along(sentences)) {
+  chi_sentence = calculate_chi_squared(sentences[i], letter_frequencies)
+  p_sentence[i] = sum(chi_square_stats >= chi_sentence) / 10000
+}
+
+#I appear to have done something horribly wrong
+p_vals_df <- data.frame(Sentence = sentences, P_Value = round(p_sentence, 3))
+print(p_vals_df)
+
+min_p_value_row <- p_vals_df[which.min(p_vals_df$P_Value), ]
+min_sentence <- min_p_value_row$Sentence
+min_p_value <- min_p_value_row$P_Value
+
+cat(paste("According to the table, the sentence written by an LLM is:", min_sentence, "with a p-value of", min_p_value))
+```
